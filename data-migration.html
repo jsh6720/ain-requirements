@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>데이터 마이그레이션</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2563eb;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 6px;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #eff6ff;
+            border-left: 4px solid #2563eb;
+            border-radius: 4px;
+            display: none;
+        }
+        .result.show {
+            display: block;
+        }
+        .error {
+            background: #fef2f2;
+            border-left-color: #ef4444;
+            color: #dc2626;
+        }
+        .success {
+            background: #f0fdf4;
+            border-left-color: #10b981;
+            color: #059669;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Google Sheets 데이터 마이그레이션</h1>
+        
+        <div class="section">
+            <h2>1. 화학물질확인 데이터</h2>
+            <p>Google Sheets의 "화학물질확인" 시트에서 복사한 CSV 데이터를 붙여넣으세요.</p>
+            <textarea id="chemicalData" placeholder="규격정제,No,접수일자,접수번호,상태,상호..."></textarea>
+            <button onclick="migrateChemicalData()">화학물질확인 데이터 마이그레이션</button>
+            <div id="chemicalResult" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h2>2. MSDS 데이터</h2>
+            <p>Google Sheets의 "화학물질등록,신고(MSDS)" 시트에서 복사한 CSV 데이터를 붙여넣으세요.</p>
+            <textarea id="msdsData" placeholder="수입자,규격정제,내부관리 No,물질..."></textarea>
+            <button onclick="migrateMsdsData()">MSDS 데이터 마이그레이션</button>
+            <div id="msdsResult" class="result"></div>
+        </div>
+
+        <div class="section">
+            <h2>3. 전파법/전안법 데이터</h2>
+            <p>Google Sheets의 "전안/전파법" 시트에서 복사한 CSV 데이터를 붙여넣으세요.</p>
+            <textarea id="radioData" placeholder="규격정제,법령,화주,모델명..."></textarea>
+            <button onclick="migrateRadioData()">전파법/전안법 데이터 마이그레이션</button>
+            <div id="radioResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        // CSV 파싱 함수
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) return [];
+            
+            const headers = lines[0].split(',').map(h => h.trim());
+            const records = [];
+            
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',');
+                if (values.length < headers.length) continue;
+                
+                const record = {};
+                headers.forEach((header, index) => {
+                    record[header] = values[index] ? values[index].trim() : '';
+                });
+                records.push(record);
+            }
+            
+            return records;
+        }
+
+        // 화학물질확인 데이터 마이그레이션
+        async function migrateChemicalData() {
+            const textarea = document.getElementById('chemicalData');
+            const resultDiv = document.getElementById('chemicalResult');
+            const text = textarea.value.trim();
+            
+            if (!text) {
+                showResult(resultDiv, '데이터를 입력해주세요.', 'error');
+                return;
+            }
+            
+            try {
+                const records = parseCSV(text);
+                let successCount = 0;
+                let errorCount = 0;
+                
+                for (const record of records) {
+                    const data = {
+                        spec_no: record['규격정제'] || '',
+                        no: record['No'] || '',
+                        receipt_date: record['접수일자'] || '',
+                        receipt_number: record['접수번호'] || '',
+                        status: record['상태'] || '',
+                        company: record['상호'] || '',
+                        manager: record['담당자'] || '',
+                        user: record['사용자'] || '',
+                        product_name: record['제품명'] || '',
+                        model_spec: record['모델ㆍ규격'] || '',
+                        import_country: record['수입국'] || '',
+                        annual_import_qty: record['연간수입예정량'] || '',
+                        hsk_no: record['HSK No'] || '',
+                        division: record['구분'] || '',
+                        usage: record['사용여부'] || '',
+                        agent: record['대리인'] || '',
+                        save_date: record['저장일자'] || '',
+                        department: record['소속'] || '',
+                        existing_registered: record['기존(등록)'] || '',
+                        existing_exempted: record['기존(면제)'] || '',
+                        new_registered: record['신규(등록)'] || '',
+                        new_exempted: record['신규(면제)'] || '',
+                        toxic_substance: record['유독물질'] || '',
+                        permitted_substance: record['허가물질'] || '',
+                        restricted_substance: record['제한물질'] || '',
+                        prohibited_substance: record['금지물질'] || '',
+                        accident_prep_substance: record['사고대비물질'] || '',
+                        importer: record['상호'] || '',
+                        created_by: 'migration'
+                    };
+                    
+                    try {
+                        const response = await fetch('tables/chemical_confirmation', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                        
+                        if (response.ok) {
+                            successCount++;
+                        } else {
+                            errorCount++;
+                        }
+                    } catch (error) {
+                        errorCount++;
+                        console.error('Error:', error);
+                    }
+                }
+                
+                showResult(resultDiv, `✅ 성공: ${successCount}개, ❌ 실패: ${errorCount}개`, 'success');
+                
+            } catch (error) {
+                showResult(resultDiv, '데이터 파싱 오류: ' + error.message, 'error');
+            }
+        }
+
+        // MSDS 데이터 마이그레이션
+        async function migrateMsdsData() {
+            const textarea = document.getElementById('msdsData');
+            const resultDiv = document.getElementById('msdsResult');
+            const text = textarea.value.trim();
+            
+            if (!text) {
+                showResult(resultDiv, '데이터를 입력해주세요.', 'error');
+                return;
+            }
+            
+            try {
+                const records = parseCSV(text);
+                let successCount = 0;
+                let errorCount = 0;
+                
+                for (const record of records) {
+                    const data = {
+                        importer: record['수입자'] || '',
+                        spec_no: record['규격정제'] || '',
+                        internal_mgmt_no: record['내부관리 No'] || '',
+                        substance: record['물질'] || '',
+                        specific_gravity: record['비중'] || '',
+                        existing_new: record['기존/신규(Cas)'] || record['기존/신규'] || '',
+                        created_by: 'migration'
+                    };
+                    
+                    try {
+                        const response = await fetch('tables/msds', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                        
+                        if (response.ok) {
+                            successCount++;
+                        } else {
+                            errorCount++;
+                        }
+                    } catch (error) {
+                        errorCount++;
+                        console.error('Error:', error);
+                    }
+                }
+                
+                showResult(resultDiv, `✅ 성공: ${successCount}개, ❌ 실패: ${errorCount}개`, 'success');
+                
+            } catch (error) {
+                showResult(resultDiv, '데이터 파싱 오류: ' + error.message, 'error');
+            }
+        }
+
+        // 전파법 데이터 마이그레이션
+        async function migrateRadioData() {
+            const textarea = document.getElementById('radioData');
+            const resultDiv = document.getElementById('radioResult');
+            const text = textarea.value.trim();
+            
+            if (!text) {
+                showResult(resultDiv, '데이터를 입력해주세요.', 'error');
+                return;
+            }
+            
+            try {
+                const records = parseCSV(text);
+                let successCount = 0;
+                let errorCount = 0;
+                
+                for (const record of records) {
+                    const data = {
+                        spec_no: record['규격정제'] || '',
+                        law: record['법령'] || '',
+                        consignee: record['화주'] || '',
+                        model_name: record['모델명'] || '',
+                        note: record['비고'] || '',
+                        manufacturer: record['제조사'] || '',
+                        manufacturing_country: record['제조국'] || '',
+                        certification_no: record['인증번호'] || '',
+                        certification_date: record['인증일자'] || '',
+                        item_name: record['품목명'] || '',
+                        created_by: 'migration'
+                    };
+                    
+                    try {
+                        const response = await fetch('tables/radio_electrical_law', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                        
+                        if (response.ok) {
+                            successCount++;
+                        } else {
+                            errorCount++;
+                        }
+                    } catch (error) {
+                        errorCount++;
+                        console.error('Error:', error);
+                    }
+                }
+                
+                showResult(resultDiv, `✅ 성공: ${successCount}개, ❌ 실패: ${errorCount}개`, 'success');
+                
+            } catch (error) {
+                showResult(resultDiv, '데이터 파싱 오류: ' + error.message, 'error');
+            }
+        }
+
+        // 결과 표시
+        function showResult(element, message, type) {
+            element.textContent = message;
+            element.className = `result show ${type}`;
+        }
+    </script>
+</body>
+</html>
